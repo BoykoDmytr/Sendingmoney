@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>USDT Batch Payout (BSC)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">₮</span>
+      <div>
+        <h1>USDT Batch Payout</h1>
+        <p class="sub">BNB Smart Chain · BEP-20</p>
+      </div>
+    </div>
+    <div class="status-pills" id="statusPills">
+      <span class="pill" id="pillConfig">Settings: —</span>
+      <span class="pill" id="pillWallet">Wallet: locked</span>
+      <span class="pill" id="pillChain">Chain: —</span>
+      <span class="pill" id="pillToken">Token: —</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 1. SETTINGS -->
+    <section class="card" id="cardSettings">
+      <div class="card-head"><span class="step">1</span><h2>Settings</h2></div>
+      <div class="grid2">
+        <label>RPC URL (private recommended)
+          <input id="rpcUrl" type="text" placeholder="https://your-bsc-rpc" />
+        </label>
+        <label>RPC fallbacks (comma-separated, optional)
+          <input id="rpcFallbacks" type="text" placeholder="https://rpc1, https://rpc2" />
+        </label>
+        <label>Token address
+          <input id="tokenAddress" type="text" value="0x55d398326f99059fF775485246999027B3197955" />
+        </label>
+        <label>Chain ID
+          <input id="chainId" type="number" value="56" />
+        </label>
+        <label>Explorer URL
+          <input id="explorerUrl" type="text" value="https://bscscan.com" />
+        </label>
+        <label>Test amount (per address)
+          <input id="testAmount" type="text" value="0.1" />
+        </label>
+      </div>
+      <details class="advanced">
+        <summary>Advanced (wrong-contract guard, gas)</summary>
+        <div class="grid2">
+          <label>Expected symbol <input id="expectedSymbol" type="text" value="USDT" /></label>
+          <label>Expected decimals <input id="expectedDecimals" type="number" value="18" /></label>
+          <label>Max retries <input id="maxRetries" type="number" value="5" /></label>
+          <label>Gas limit / tx <input id="gasLimitPerTx" type="number" value="100000" /></label>
+          <label>Gas price ×multiplier <input id="gasPriceMultiplier" type="text" value="1.1" /></label>
+        </div>
+      </details>
+      <div class="actions">
+        <button id="btnApply" class="primary">Apply settings</button>
+        <span class="hint" id="settingsHint"></span>
+      </div>
+    </section>
+
+    <!-- 2. WALLET -->
+    <section class="card" id="cardWallet">
+      <div class="card-head"><span class="step">2</span><h2>Payout wallet</h2></div>
+      <p class="note">🔒 The private key is sent once to the local engine, kept only in memory for this session, and <strong>never stored on disk or shown again</strong>. Use a dedicated payout wallet.</p>
+      <div class="row">
+        <input id="privateKey" type="password" placeholder="0x… private key (64 hex)" autocomplete="off" spellcheck="false" />
+        <button id="btnUnlock" class="primary">Unlock</button>
+        <button id="btnLock" class="ghost" disabled>Lock</button>
+      </div>
+      <div class="walletInfo" id="walletInfo" hidden>
+        <span>Address:</span> <code id="walletAddr"></code>
+      </div>
+    </section>
+
+    <!-- 3. CONNECT -->
+    <section class="card" id="cardConnect">
+      <div class="card-head"><span class="step">3</span><h2>Connect &amp; read token</h2></div>
+      <div class="actions">
+        <button id="btnConnect" class="primary">Connect &amp; read token on-chain</button>
+        <span class="hint" id="connectHint"></span>
+      </div>
+      <div id="connectResult" class="kv" hidden></div>
+    </section>
+
+    <!-- 4. FILE + VALIDATION -->
+    <section class="card" id="cardFile">
+      <div class="card-head"><span class="step">4</span><h2>Recipients file</h2></div>
+      <div class="row">
+        <button id="btnChoose" class="primary">Choose payouts.xlsx…</button>
+        <code id="filePath" class="filepath">No file selected</code>
+        <button id="btnValidate" class="ghost" disabled>Validate</button>
+      </div>
+      <div id="validationSummary" class="summary" hidden></div>
+      <div id="dupBox" class="dupbox" hidden>
+        <span id="dupText"></span>
+        <label class="inline">Duplicates:
+          <select id="dupPolicy">
+            <option value="reject">reject (stop)</option>
+            <option value="sum">sum amounts</option>
+          </select>
+        </label>
+      </div>
+      <div class="tablewrap"><table id="recipientsTable" hidden><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <!-- 5. PLAN -->
+    <section class="card" id="cardPlan">
+      <div class="card-head"><span class="step">5</span><h2>Mode &amp; plan</h2></div>
+      <div class="modes">
+        <label class="radio"><input type="radio" name="mode" value="dry-run" checked /> <b>Dry-run</b> <span>validate + plan, sends nothing</span></label>
+        <label class="radio"><input type="radio" name="mode" value="test" /> <b>Test</b> <span>send test amount to every address</span></label>
+        <label class="radio"><input type="radio" name="mode" value="execute" /> <b>Execute</b> <span>send the real amounts</span></label>
+      </div>
+      <div class="actions">
+        <button id="btnPrepare" class="primary" disabled>Prepare plan</button>
+        <span class="hint" id="prepareHint"></span>
+      </div>
+      <div id="planSummary" class="summary" hidden></div>
+    </section>
+
+    <!-- 6. PRE-FLIGHT -->
+    <section class="card" id="cardPreflight">
+      <div class="card-head"><span class="step">6</span><h2>Pre-flight</h2></div>
+      <div class="actions">
+        <button id="btnPreflight" class="primary" disabled>Run pre-flight checks</button>
+        <span class="hint" id="preflightHint"></span>
+      </div>
+      <div id="preflightResult" class="kv" hidden></div>
+      <div id="preflightProblems" class="problems" hidden></div>
+    </section>
+
+    <!-- 7. RUN -->
+    <section class="card" id="cardRun">
+      <div class="card-head"><span class="step">7</span><h2>Send</h2></div>
+      <div class="actions">
+        <button id="btnStart" class="danger" disabled>Start payout…</button>
+        <button id="btnStop" class="ghost" disabled>Stop (finish current tx)</button>
+        <label class="inline"><input type="checkbox" id="stopOnError" /> stop on first error</label>
+      </div>
+      <div class="progresswrap" id="progressWrap" hidden>
+        <div class="progressbar"><div id="progressFill"></div></div>
+        <div class="counts" id="counts"></div>
+      </div>
+      <div class="tablewrap"><table id="runTable" hidden><thead></thead><tbody></tbody></table></div>
+      <div id="runSummary" class="summary" hidden></div>
+      <div class="actions" id="runArtifacts" hidden>
+        <button id="btnOpenResults" class="ghost">Open results.xlsx</button>
+        <button id="btnOpenLog" class="ghost">Open log file</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Confirmation modal -->
+  <div class="modal-backdrop" id="confirmModal" hidden>
+    <div class="modal">
+      <h3 id="confirmTitle">Confirm send</h3>
+      <p id="confirmText"></p>
+      <p>Type <code>YES</code> to proceed:</p>
+      <input id="confirmInput" type="text" autocomplete="off" spellcheck="false" />
+      <div class="modal-actions">
+        <button id="btnConfirmCancel" class="ghost">Cancel</button>
+        <button id="btnConfirmGo" class="danger" disabled>Confirm &amp; send</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

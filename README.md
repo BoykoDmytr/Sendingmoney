@@ -1,12 +1,19 @@
-# USDT (BEP-20) Batch Payout CLI
+# USDT (BEP-20) Batch Payout — CLI + Desktop App
 
-A production-ready command-line tool for distributing **USDT (BEP-20) on BNB Smart
-Chain** to a list of recipients from an Excel file.
+A production-ready tool for distributing **USDT (BEP-20) on BNB Smart Chain** to a
+list of recipients from an Excel file. It ships in two forms that share the same
+audited core:
+
+- **Desktop app (Electron)** — a guided 7-step GUI ([jump to it](#desktop-app-gui)).
+- **CLI** — scriptable, `--dry-run` → `--test` → `--execute`.
 
 This tool moves **real money**. It is built so that the *default* action is to do
 nothing dangerous: it validates everything first, runs a pre-flight balance/gas
 check, requires an explicit confirmation, and keeps an idempotent ledger so a
-crash or a `Ctrl+C` can be safely resumed **without double-paying anyone**.
+crash or a `Ctrl+C` (or **Stop** in the GUI) can be safely resumed **without
+double-paying anyone**.
+
+![Desktop app](docs/gui-preview.png)
 
 > ⚠️ **USDT on BSC has 18 decimals, not 6.** Unlike USDT on Ethereum/Tron, the BSC
 > contract (`0x55d398326f99059fF775485246999027B3197955`) uses 18 decimals. This
@@ -27,7 +34,82 @@ crash or a `Ctrl+C` can be safely resumed **without double-paying anyone**.
 | **Idempotent ledger** | A SQLite ledger keyed by `(run_id, address)` skips anyone already paid. Re-running resumes from where it stopped. |
 | **Receipt-verified success** | A payment counts as success only when the receipt `status === success` **and** a matching `Transfer` event is present — not the function return value. |
 | **Kill switch** | `Ctrl+C` finishes the in-flight transaction, records it, and exits cleanly so the ledger stays consistent. |
-| **Secrets stay secret** | The private key is read only from `.env`, never logged or written anywhere. `.env`, logs, the DB and spreadsheets are git-ignored. |
+| **Secrets stay secret** | The private key is read only from `.env` (CLI) or entered each launch and kept in memory (GUI) — never logged or written anywhere. `.env`, logs, the DB and spreadsheets are git-ignored. |
+
+---
+
+## Desktop app (GUI)
+
+A cross-platform Electron app (built/tested for **Windows**) that walks you
+through the same safe flow with live progress. It reuses the exact same core as
+the CLI, so every guard above applies.
+
+### Security model of the GUI
+
+- The renderer is **sandboxed** with `contextIsolation: true`, `nodeIntegration:
+  false` and `sandbox: true`. It has **no Node, no filesystem and no network**;
+  it can only call a small, whitelisted set of functions exposed through a
+  `contextBridge` preload. A strict Content-Security-Policy blocks remote/inline
+  code, and navigation/popups are locked down.
+- **The private key is entered once per launch and lives only in the main
+  process's memory.** It is never written to disk, never returned to the UI,
+  never logged, never serialized. Closing the app wipes it. (You chose
+  "enter each launch" — nothing is persisted.)
+- The ledger DB, per-run logs and `results.xlsx` are written under your OS user
+  data folder (so a packaged install stays read-only and clean).
+
+### Run it from source (dev)
+
+```bash
+npm install
+npm run app:rebuild   # one-time: compiles better-sqlite3 for Electron's ABI
+npm run app           # launches the desktop app
+```
+
+### Build a Windows installer (.exe)
+
+On a Windows machine (electron-builder builds the installer for the OS it runs on):
+
+```bash
+npm install
+npm run dist:win      # produces dist-app/USDT Batch Payout Setup <version>.exe (NSIS)
+```
+
+> **Native module note.** `better-sqlite3` is a native addon and must match the
+> runtime's ABI. `npm run app:rebuild` builds it for Electron; if you then want to
+> use the **CLI** again under plain Node, run `npm rebuild better-sqlite3` to
+> switch it back. Packaging (`npm run dist:win`) rebuilds it for the bundled
+> Electron automatically. Build the Windows installer **on Windows** (electron
+> builds for the host OS).
+
+Hardening & signing:
+
+- The packaged binary is hardened with **Electron fuses** (`scripts/afterPack.cjs`):
+  `RunAsNode`, the Node-options env var and the Node CLI inspector are disabled, so
+  the installed app can't be coerced into a generic Node process to read the
+  in-memory key.
+- The installer is **unsigned** by default (personal use), so Windows SmartScreen
+  may warn on first run. To sign it, see `build/README.md`. An app icon can be
+  added at `build/icon.ico` (also see `build/README.md`).
+
+### Using the app
+
+The window guides you top-to-bottom; each step unlocks the next:
+
+1. **Settings** — RPC URL (private recommended), optional fallbacks, token/chain
+   (BSC USDT pre-filled), test amount → *Apply settings*.
+2. **Payout wallet** — paste the private key → *Unlock* (the field is wiped
+   immediately; only the derived address is shown).
+3. **Connect & read token** — reads `symbol`/`decimals` on-chain, runs the
+   wrong-contract guard, shows balances.
+4. **Recipients file** — choose `payouts.xlsx` → *Validate* (errors are listed in
+   a table; duplicates can be summed or rejected).
+5. **Mode & plan** — pick Dry-run / Test / Execute → *Prepare plan* (shows totals
+   and how many are already paid).
+6. **Pre-flight** — verifies USDT + BNB balances vs. the run.
+7. **Send** — for Test/Execute you must type **YES** to confirm; a live table
+   shows each transfer with its BscScan link, a progress bar and counts. **Stop**
+   finishes the in-flight tx and halts cleanly; just run again to resume.
 
 ---
 
@@ -172,16 +254,25 @@ address already has a **success** row for this `run_id`, it is skipped. So:
 
 ```
 src/
-  cli.js        Entry point + argument parsing + orchestration (the safety order).
-  config.js     Loads/validates .env with BSC defaults; never logs the key.
+  cli.js        CLI entry: argument parsing + orchestration (the safety order).
+  engine.js     Stateful programmatic facade used by the GUI (same safety order);
+                holds the private key in memory only, returns JSON-safe results.
+  config.js     Loads/validates config from .env (CLI) or an object (GUI); never logs the key.
   parse.js      Reads the .xlsx and validates EVERY row (collects all errors).
   chain.js      viem clients, RPC failover + retry, token reads, send + receipt verify.
   preflight.js  Balance/gas checks and the pre-flight summary.
   ledger.js     SQLite idempotency ledger + deterministic run_id.
-  payout.js     Sequential, idempotent, manual-nonce send engine + kill switch.
+  payout.js     Sequential, idempotent, manual-nonce send engine + kill switch + event stream.
   report.js     results.xlsx exporter.
   logger.js     Per-run file + console logger.
   util.js       Decimal-safe amount parsing and table rendering.
+electron/
+  main.cjs      Electron main process: owns the engine + key, whitelisted IPC handlers.
+  preload.cjs   contextBridge: the only renderer↔main surface (no raw ipc, no Node).
+renderer/
+  index.html    The GUI (strict CSP, no inline scripts).
+  styles.css    Dark theme.
+  app.js        UI logic — calls window.api.*, renders live progress.
 scripts/
   make-example.js   Generates payouts.example.xlsx.
 test/
@@ -196,15 +287,21 @@ npm test     # offline suite: amount precision, validation, duplicates, ledger i
 
 ## Security notes
 
-- The **private key** is read only from `.env` (git-ignored) and is never logged,
-  printed or written to the ledger/results. Use a **dedicated** payout wallet
-  that holds only the funds for this distribution.
-- `.gitignore` excludes `.env`, `*.log`, the SQLite DB, `payouts.xlsx` and
-  `results*.xlsx` so recipient data and secrets are never committed.
-- **Dependency advisories:** `npm audit` reports issues in `xlsx` (SheetJS) and a
-  transitive `ws` (via `viem`). In this tool the spreadsheet is your own local,
-  trusted file and the RPC transport is HTTP-only (the vulnerable `ws` WebSocket
-  path is unused), so the practical risk is low. If your policy requires a clean
-  audit, install SheetJS from its official CDN build
+- The **private key** is never logged, printed or written to the ledger/results.
+  In the **CLI** it is read only from `.env` (git-ignored); in the **GUI** it is
+  entered each launch and kept only in main-process memory (never persisted). Use
+  a **dedicated** payout wallet that holds only the funds for this distribution.
+- The **GUI renderer** is sandboxed (`contextIsolation`, no `nodeIntegration`,
+  `sandbox: true`) with a strict CSP and locked-down navigation; it reaches the
+  engine only through a minimal whitelisted preload bridge.
+- `.gitignore` excludes `.env`, `*.log`, the SQLite DB, `payouts.xlsx`,
+  `results*.xlsx` and the Electron `dist-app/` output so recipient data and
+  secrets are never committed.
+- **Dependency advisories:** `npm audit` reports issues in `xlsx` (SheetJS), a
+  transitive `ws` (via `viem`), and several in **electron-builder** dev deps. The
+  electron-builder advisories are **dev-only** (build tooling, not shipped in the
+  app). The spreadsheet is your own local, trusted file and the RPC transport is
+  HTTP-only (the vulnerable `ws` WebSocket path is unused), so the practical risk
+  is low. For a clean SheetJS audit, install its official CDN build
   (`npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`).
-- Always do `--dry-run`, then `--test`, then `--execute`.
+- Always do **Dry-run**, then **Test**, then **Execute**.

@@ -1,72 +1,122 @@
-// Loads and validates configuration from .env (with hard-wired BSC defaults).
-// The private key is read here and NEVER logged or persisted anywhere.
+// Configuration assembly + validation, with hard-wired BSC defaults.
+// Two sources are supported, sharing the same validation:
+//   - loadConfig():  from .env (the CLI)
+//   - buildConfig(): from a plain object (the desktop GUI)
+// The private key is validated here and NEVER logged or persisted.
 import 'dotenv/config';
 import { getAddress, isAddress } from 'viem';
 
-function reqEnv(name) {
-  const v = process.env[name];
-  if (!v || !String(v).trim()) {
-    throw new Error(`Missing required env var ${name}. Copy .env.example to .env and fill it in.`);
-  }
-  return String(v).trim();
-}
+export const DEFAULTS = {
+  tokenAddress: '0x55d398326f99059fF775485246999027B3197955',
+  chainId: 56,
+  explorerUrl: 'https://bscscan.com',
+  expectedSymbol: 'USDT',
+  expectedDecimals: 18,
+  testAmount: '0.1',
+  maxRetries: 5,
+  gasLimitPerTx: 100000,
+  gasPriceMultiplier: 1.1,
+};
 
-function num(name, def) {
-  const v = process.env[name];
-  if (v === undefined || v === '') return def;
+function toNumber(name, v, def) {
+  if (v === undefined || v === null || v === '') return def;
   const n = Number(v);
-  if (!Number.isFinite(n)) throw new Error(`Env var ${name} must be a number, got "${v}"`);
+  if (!Number.isFinite(n)) throw new Error(`${name} must be a number, got "${v}"`);
   return n;
 }
 
+/** Validate a private key string; returns it normalized, or null if not provided. */
+export function validatePrivateKey(pk, { required = false } = {}) {
+  const v = pk == null ? '' : String(pk).trim();
+  if (!v || /^0x0+$/.test(v)) {
+    if (required) throw new Error('Private key is required (0x-prefixed, 64 hex characters).');
+    return null;
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(v)) {
+    throw new Error('Private key must be a 0x-prefixed 64-hex-character string.');
+  }
+  return v;
+}
+
+function normalizeRpcUrls(primary, fallbacks) {
+  const list = [];
+  if (primary && String(primary).trim()) list.push(String(primary).trim());
+  const fb = Array.isArray(fallbacks)
+    ? fallbacks
+    : String(fallbacks || '').split(',');
+  for (const f of fb) {
+    const s = String(f || '').trim();
+    if (s) list.push(s);
+  }
+  const urls = [...new Set(list)];
+  if (urls.length === 0) throw new Error('At least one RPC URL is required.');
+  for (const u of urls) {
+    if (!/^https?:\/\//i.test(u)) throw new Error(`RPC URL must start with http(s)://  ->  "${u}"`);
+  }
+  return urls;
+}
+
 /**
- * Build the runtime config.
+ * Core assembler shared by loadConfig/buildConfig.
+ * @param {object} src  raw values (strings/numbers) already extracted from a source
+ */
+function assemble(src) {
+  const tokenAddress = (() => {
+    const a = (src.tokenAddress && String(src.tokenAddress).trim()) || DEFAULTS.tokenAddress;
+    if (!isAddress(a)) throw new Error(`Token address is not a valid address: ${a}`);
+    return getAddress(a);
+  })();
+
+  const cfg = {
+    tokenAddress,
+    chainId: toNumber('chainId', src.chainId, DEFAULTS.chainId),
+    explorerUrl: ((src.explorerUrl && String(src.explorerUrl).trim()) || DEFAULTS.explorerUrl).replace(/\/+$/, ''),
+    expectedSymbol: (src.expectedSymbol && String(src.expectedSymbol).trim()) || DEFAULTS.expectedSymbol,
+    expectedDecimals: toNumber('expectedDecimals', src.expectedDecimals, DEFAULTS.expectedDecimals),
+    testAmount: (src.testAmount && String(src.testAmount).trim()) || DEFAULTS.testAmount,
+    maxRetries: toNumber('maxRetries', src.maxRetries, DEFAULTS.maxRetries),
+    gasLimitPerTx: BigInt(toNumber('gasLimitPerTx', src.gasLimitPerTx, DEFAULTS.gasLimitPerTx)),
+    gasPriceMultiplier: toNumber('gasPriceMultiplier', src.gasPriceMultiplier, DEFAULTS.gasPriceMultiplier),
+    rpcUrls: normalizeRpcUrls(src.rpcUrl, src.rpcFallbacks),
+    privateKey: null,
+  };
+  return cfg;
+}
+
+/**
+ * Build the runtime config from .env (CLI).
  * @param {object} opts
  * @param {boolean} opts.needsWallet  true for modes that actually send (test/execute)
  */
 export function loadConfig({ needsWallet }) {
-  const cfg = {
-    tokenAddress: (() => {
-      const a = process.env.TOKEN_ADDRESS?.trim() || '0x55d398326f99059fF775485246999027B3197955';
-      if (!isAddress(a)) throw new Error(`TOKEN_ADDRESS is not a valid address: ${a}`);
-      return getAddress(a);
-    })(),
-    chainId: num('CHAIN_ID', 56),
-    explorerUrl: (process.env.EXPLORER_URL?.trim() || 'https://bscscan.com').replace(/\/+$/, ''),
-    expectedSymbol: process.env.EXPECTED_SYMBOL?.trim() || 'USDT',
-    expectedDecimals: num('EXPECTED_DECIMALS', 18),
-    testAmount: process.env.TEST_AMOUNT?.trim() || '0.1',
-    maxRetries: num('MAX_RETRIES', 5),
-    gasLimitPerTx: BigInt(num('GAS_LIMIT_PER_TX', 100000)),
-    gasPriceMultiplier: num('GAS_PRICE_MULTIPLIER', 1.1),
-    rpcUrls: [],
-    privateKey: null,
-  };
+  const cfg = assemble({
+    tokenAddress: process.env.TOKEN_ADDRESS,
+    chainId: process.env.CHAIN_ID,
+    explorerUrl: process.env.EXPLORER_URL,
+    expectedSymbol: process.env.EXPECTED_SYMBOL,
+    expectedDecimals: process.env.EXPECTED_DECIMALS,
+    testAmount: process.env.TEST_AMOUNT,
+    maxRetries: process.env.MAX_RETRIES,
+    gasLimitPerTx: process.env.GAS_LIMIT_PER_TX,
+    gasPriceMultiplier: process.env.GAS_PRICE_MULTIPLIER,
+    rpcUrl: process.env.RPC_URL,
+    rpcFallbacks: process.env.RPC_FALLBACKS,
+  });
+  cfg.privateKey = validatePrivateKey(process.env.PRIVATE_KEY, { required: needsWallet });
+  return cfg;
+}
 
-  // RPC endpoints (primary + optional fallbacks), de-duplicated, order preserved.
-  const rpcs = [process.env.RPC_URL?.trim()].filter(Boolean);
-  const fallbacks = (process.env.RPC_FALLBACKS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  cfg.rpcUrls = [...new Set([...rpcs, ...fallbacks])];
-  if (cfg.rpcUrls.length === 0) {
-    throw new Error('Missing RPC_URL. Set a (preferably private) BSC RPC endpoint in .env.');
+/**
+ * Build the runtime config from a plain object (desktop GUI). The private key,
+ * if supplied, is validated but the caller decides when to attach it (the GUI
+ * unlocks separately and never persists it).
+ * @param {object} input
+ */
+export function buildConfig(input = {}) {
+  const cfg = assemble(input);
+  if (input.privateKey != null && input.privateKey !== '') {
+    cfg.privateKey = validatePrivateKey(input.privateKey, { required: false });
   }
-
-  // Load the key when present (so dry-run can show real balances), but only
-  // *require* it for modes that actually send.
-  const pk = process.env.PRIVATE_KEY?.trim();
-  if (pk && !/^0x0+$/.test(pk)) {
-    if (!/^0x[0-9a-fA-F]{64}$/.test(pk)) {
-      throw new Error('PRIVATE_KEY must be a 0x-prefixed 64-hex-character string.');
-    }
-    cfg.privateKey = pk;
-  } else if (needsWallet) {
-    if (!pk) reqEnv('PRIVATE_KEY'); // throws the standard "missing" message
-    throw new Error('PRIVATE_KEY is all zeros (the placeholder). Set a real payout key in .env.');
-  }
-
   return cfg;
 }
 

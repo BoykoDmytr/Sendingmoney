@@ -19,5 +19,9 @@ results*.xlsx
 node_modules/
 npm-debug.log*
 
+# Electron build output + scratch
+dist-app/
+.tmp-*
+
 # OS
 .DS_Store

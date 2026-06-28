@@ -1,8 +1,9 @@
 {
   "name": "usdt-batch-payout",
-  "version": "1.0.0",
-  "description": "Production-ready CLI for batch USDT (BEP-20) payouts on BNB Smart Chain with validation, pre-flight checks and idempotent ledger.",
+  "version": "1.1.0",
+  "description": "Batch USDT (BEP-20) payouts on BNB Smart Chain — CLI + desktop GUI, with validation, pre-flight checks and an idempotent ledger.",
   "type": "module",
+  "main": "electron/main.cjs",
   "bin": {
     "payout": "src/cli.js"
   },
@@ -10,7 +11,11 @@
     "start": "node src/cli.js",
     "payout": "node src/cli.js",
     "make-example": "node scripts/make-example.js",
-    "test": "node test/offline.test.mjs"
+    "test": "node test/offline.test.mjs",
+    "app": "electron .",
+    "app:rebuild": "electron-builder install-app-deps",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis"
   },
   "engines": {
     "node": ">=20"
@@ -21,5 +26,38 @@
     "dotenv": "^16.4.7",
     "viem": "^2.21.55",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@electron/fuses": "^1.8.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.personal.usdtbatchpayout",
+    "productName": "USDT Batch Payout",
+    "afterPack": "scripts/afterPack.cjs",
+    "directories": {
+      "output": "dist-app",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
