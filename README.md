@@ -178,17 +178,38 @@ cp .env.example .env      # then edit .env (PRIVATE_KEY, RPC_URL, ...)
 | `GAS_LIMIT_PER_TX` | `100000` | Generous fixed gas limit (unused gas is refunded). |
 | `GAS_PRICE_MULTIPLIER` | `1.1` | Headroom over the network gas price. |
 
-## Input file (`payouts.xlsx`)
+## Input file
 
-First row is headers. Required columns: **`address`** and **`amount`** (extra
-columns like `note` are ignored; blank rows are ignored).
+The file needs one **address** column and one **amount** column. **Each row gets
+its own amount** — amounts are per-recipient and can all be different. The
+parser is flexible about the rest:
 
-| address | amount | note |
-| --- | --- | --- |
-| 0x8894…D4E3 | 12.5 | invoice #1002 |
-| 0xF977…aceC | 100 | refback |
+- **Header names** are matched in English *and* Ukrainian/Russian — e.g.
+  `address` / `wallet` / **`Гаманець`** / `адрес` / `кошелёк`, and
+  `amount` / `value` / `sum` / **`Сума`** / `сумма`.
+- **A title/banner row above the headers is skipped** — the header row is
+  auto-detected (e.g. a "CRYPTO HORNET · Рефбек 01.06" line on top is fine).
+- **Extra columns** (`№`, `Статус`, `note`, …) and **blank rows** are ignored.
+- **Totals / section rows** (a cell like `РАЗОМ` / `TOTAL` with no `0x` address)
+  are **ignored and reported**, not treated as errors.
+- If the workbook has several sheets, the **first sheet that has an address +
+  amount column** is used (the chosen sheet + columns are shown after Validate).
 
-Generate a ready-made example to copy from:
+| № | Гаманець (USDT BEP20) | Сума, USDT | Статус |
+| --- | --- | --- | --- |
+| 1 | 0x80f7…2278 | 847.9162 | виплачено |
+| 2 | 0x583b…0201 | 420.1763 | виплачено |
+| … | … | … | … |
+| | РАЗОМ | 1268.09 | ← ignored |
+
+> ⚠️ **The app pays *everyone* in the file.** A `Статус: виплачено` ("paid")
+> column is **not** read — the idempotent ledger only prevents double-paying
+> within the app's *own* runs (e.g. a crash mid-batch). If some people were
+> already paid **outside** the app, remove their rows first (or use a file with
+> only those still to be paid). Always do a **Dry-run** to review the plan, and a
+> **Test** run, before **Execute**.
+
+Generate a ready-made English example to copy from:
 
 ```bash
 npm run make-example          # writes payouts.example.xlsx

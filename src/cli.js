@@ -200,7 +200,12 @@ async function main() {
 
   // --- parse + validate file ---------------------------------------------
   logger.info(`Parsing & validating ${opts.file} ...`);
-  const { recipients: parsed, errors, duplicates } = parsePayouts(opts.file, decimals);
+  const { recipients: parsed, errors, duplicates, ignored, sheetName, headerRow, addrHeader, amtHeader } =
+    parsePayouts(opts.file, decimals);
+  logger.info(`Using sheet "${sheetName}" (header row ${headerRow}): address="${addrHeader}", amount="${amtHeader}".`);
+  if (ignored && ignored.length > 0) {
+    logger.warn(`Ignored ${ignored.length} non-recipient row(s) (e.g. totals): ${ignored.map((x) => `row ${x.row} "${x.value}"`).join(', ')}.`);
+  }
 
   if (errors.length > 0) {
     const tbl = renderTable(

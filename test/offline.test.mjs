@@ -73,6 +73,28 @@ console.log('\n# duplicate detection (case-insensitive)');
   ok(duplicates.length === 1 && duplicates[0].rows.length === 2, '1 dup across 2 rows');
 }
 
+console.log('\n# real-world format: title row + Ukrainian headers + totals row');
+{
+  const a1 = getAddress('0x80f779833ae323defbd5917a85cbe5df96532278');
+  const a2 = getAddress('0x583bd313d279872cc672330255ce84b606dd0201');
+  const a3 = getAddress('0xbee19486e8567c2bafe576cc5554f156ecff3783');
+  const p = writeSheet([
+    ['CRYPTO HORNET  ·  Рефбек 01.06.2026', '', '', ''], // banner/title row (skipped)
+    ['№', 'Гаманець (USDT BEP20)', 'Сума, USDT', 'Статус'], // real headers on row 2
+    [1, a1, 847.9162, 'виплачено'],
+    [2, a2, 420.1763, 'виплачено'],
+    [3, a3, 360.8781, 'виплачено'],
+    ['', 'РАЗОМ', 1628.9706, ''], // totals row (ignored, not an error)
+  ], tmp('refback.xlsx'));
+  const { recipients, errors, ignored, addrHeader, amtHeader, headerRow } = parsePayouts(p, DEC);
+  ok(headerRow === 2, 'header row auto-detected below the banner (row 2)');
+  ok(addrHeader.includes('Гаманець') && amtHeader.includes('Сума'), 'Ukrainian address/amount columns matched');
+  ok(recipients.length === 3 && errors.length === 0, '3 recipients, 0 errors');
+  ok(new Set(recipients.map((r) => r.human)).size === 3, 'amounts are distinct per recipient');
+  ok(recipients[0].wei === 847916200000000000000n, '847.9162 -> wei (18 decimals, distinct amount)');
+  ok(ignored.length === 1 && ignored[0].value === 'РАЗОМ', 'totals row ("РАЗОМ") ignored, not errored');
+}
+
 console.log('\n# ledger idempotency / resume');
 {
   const path = tmp('ledger-test.sqlite');

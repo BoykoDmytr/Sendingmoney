@@ -213,9 +213,14 @@ $('btnValidate').addEventListener('click', async () => {
   invalidatePlan(); // a re-validate means any prior plan is stale
   const sum = $('validationSummary');
   sum.hidden = false; sum.innerHTML = '';
-  const line = document.createElement('div');
-  line.textContent = `${v.recipients.length} valid recipient(s), ${v.errors.length} error(s). Total: ${v.totalHuman} ${v.symbol}.`;
-  sum.appendChild(line);
+  const addLine = (txt) => { const d = document.createElement('div'); d.textContent = txt; sum.appendChild(d); };
+  // Which sheet/columns were auto-detected.
+  addLine(`Sheet "${v.sheetName}" · address column: "${v.addrHeader}" · amount column: "${v.amtHeader}".`);
+  addLine(`${v.recipients.length} valid recipient(s), ${v.errors.length} error(s). Total: ${v.totalHuman} ${v.symbol}.`);
+  // Ignored non-recipient rows (totals / section labels).
+  if (v.ignored && v.ignored.length) {
+    addLine(`ⓘ Ignored ${v.ignored.length} non-recipient row(s) (e.g. totals): ${v.ignored.map((x) => `row ${x.row} "${x.value}"`).join(', ')}.`);
+  }
 
   // duplicates
   state.hasDuplicates = v.duplicates.length > 0;

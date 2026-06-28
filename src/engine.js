@@ -136,13 +136,21 @@ export class PayoutEngine {
   /** Parse + validate a spreadsheet. Requires connect() first (needs decimals). */
   validate(filePath) {
     if (!this.token) throw new Error('Connect first so the token decimals are known.');
-    const { recipients, errors, duplicates } = parsePayouts(filePath, this.token.decimals);
+    const { recipients, errors, duplicates, ignored, sheetName, headerRow, addrHeader, amtHeader } =
+      parsePayouts(filePath, this.token.decimals);
     const total = sumBig(recipients.map((r) => r.wei));
-    this.sessionLogger?.info(`Validated ${filePath}: ${recipients.length} ok, ${errors.length} errors, ${duplicates.length} dup-addresses.`);
+    this.sessionLogger?.info(
+      `Validated ${filePath} [sheet "${sheetName}", header row ${headerRow}: "${addrHeader}" / "${amtHeader}"]: ${recipients.length} ok, ${errors.length} errors, ${ignored.length} ignored, ${duplicates.length} dup-addresses.`,
+    );
     return {
       recipients: recipients.map(toSendableRecipient),
       errors,
       duplicates,
+      ignored,
+      sheetName,
+      headerRow,
+      addrHeader,
+      amtHeader,
       totalHuman: formatUnits(total, this.token.decimals),
       symbol: this.token.symbol,
       decimals: this.token.decimals,
