@@ -1,0 +1,25 @@
+{
+  "name": "usdt-batch-payout",
+  "version": "1.0.0",
+  "description": "Production-ready CLI for batch USDT (BEP-20) payouts on BNB Smart Chain with validation, pre-flight checks and idempotent ledger.",
+  "type": "module",
+  "bin": {
+    "payout": "src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "payout": "node src/cli.js",
+    "make-example": "node scripts/make-example.js",
+    "test": "node test/offline.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^16.4.7",
+    "viem": "^2.21.55",
+    "xlsx": "^0.18.5"
+  }
+}

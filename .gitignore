@@ -1,0 +1,23 @@
+# Secrets — NEVER commit
+.env
+
+# Logs (per-run log files)
+*.log
+logs/
+
+# Idempotency ledger / databases
+*.sqlite
+*.sqlite3
+*.db
+data/
+
+# Input / output spreadsheets with real recipient data
+payouts.xlsx
+results*.xlsx
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
