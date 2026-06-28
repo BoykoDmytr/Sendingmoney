@@ -92,6 +92,41 @@ Hardening & signing:
   may warn on first run. To sign it, see `build/README.md`. An app icon can be
   added at `build/icon.ico` (also see `build/README.md`).
 
+### Troubleshooting the build (Windows)
+
+**`'electron-builder' is not recognized`** — `npm install` didn't finish, so the
+local binaries aren't there yet. Fix the install error below first; then
+`npm run dist:win` works.
+
+**`better-sqlite3` fails with `No prebuilt binaries found` / `Could not find any
+Visual Studio installation`** — this happens when the Node version has no
+matching `better-sqlite3` prebuilt, so npm tries to compile from source (which
+needs Visual Studio C++). This repo pins `better-sqlite3@^12`, which ships
+prebuilt binaries for **Node 20, 22 and 24** (and for Electron), so a clean
+install needs **no compiler**:
+
+```powershell
+git pull
+Remove-Item -Recurse -Force node_modules   # clear the half-broken install
+npm install
+npm run app:rebuild     # build better-sqlite3 for Electron (also no compiler)
+npm run app             # or: npm run dist:win
+```
+
+If you're on an even newer Node with no prebuilt yet, either install **Node.js
+22 LTS** (recommended) or install **Visual Studio Build Tools** with the
+"Desktop development with C++" workload.
+
+**`npm warn cleanup ... EPERM: operation not permitted, rmdir`** — files were
+locked during install. Close the app/editor (and any running `npm run app`),
+and prefer a path **outside OneDrive** — `C:\Users\…\Desktop` is often
+OneDrive-synced, which locks files mid-build. Move the project to e.g.
+`C:\dev\Sendingmoney` (or pause OneDrive), then reinstall.
+
+> For `npm run dist:win` alone you can skip `app:rebuild` — electron-builder
+> rebuilds the native module for Electron during packaging. `app:rebuild` is
+> only needed before running `npm run app` in dev.
+
 ### Using the app
 
 The window guides you top-to-bottom; each step unlocks the next:

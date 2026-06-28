@@ -22,7 +22,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^12.4.1",
     "dotenv": "^16.4.7",
     "viem": "^2.21.55",
     "xlsx": "^0.18.5"
