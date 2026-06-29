@@ -4,6 +4,7 @@
   "description": "Batch USDT (BEP-20) payouts on BNB Smart Chain — CLI + desktop GUI, with validation, pre-flight checks and an idempotent ledger.",
   "type": "module",
   "main": "electron/main.cjs",
+  "author": "Sendingmoney",
   "bin": {
     "payout": "src/cli.js"
   },
@@ -14,6 +15,7 @@
     "test": "node test/offline.test.mjs",
     "app": "electron .",
     "app:rebuild": "electron-builder install-app-deps",
+    "pack:win": "electron-builder --win --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win nsis"
   },

@@ -123,6 +123,26 @@ and prefer a path **outside OneDrive** — `C:\Users\…\Desktop` is often
 OneDrive-synced, which locks files mid-build. Move the project to e.g.
 `C:\dev\Sendingmoney` (or pause OneDrive), then reinstall.
 
+**`dist:win` fails with `Cannot create symbolic link : A required privilege is
+not held by the client` (winCodeSign)** — building the **NSIS installer**
+extracts `winCodeSign`, which contains symlinks; Windows blocks creating symlinks
+without elevated rights. Note the app **already built** at this point —
+`dist-app\win-unpacked\USDT Batch Payout.exe` is a fully working program you can
+run/shortcut/copy as-is. To get the installer (or just a clean unpacked build):
+
+- **Don't need an installer?** Run the runnable build (no admin needed):
+  ```powershell
+  npm run pack:win      # -> dist-app\win-unpacked\USDT Batch Payout.exe
+  ```
+- **Want the `Setup .exe` installer?** Grant the symlink privilege, then rebuild:
+  1. Enable **Developer Mode** (Settings → Privacy & security → For developers →
+     Developer Mode = On) **or** open **PowerShell as Administrator**.
+  2. Clear the broken cache and rebuild:
+     ```powershell
+     Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
+     npm run dist:win
+     ```
+
 > For `npm run dist:win` alone you can skip `app:rebuild` — electron-builder
 > rebuilds the native module for Electron during packaging. `app:rebuild` is
 > only needed before running `npm run app` in dev.
